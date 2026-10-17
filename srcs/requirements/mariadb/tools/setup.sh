@@ -1,7 +1,9 @@
+#!/bin/sh
 set -eu
 
 DATADIR="/var/lib/mysql"
 SOCKET="/run/mysqld/mysqld.sock"
+MARKER="$DATADIR/.inception-initialized"
 
 : "${MYSQL_DATABASE:?MYSQL_DATABASE is required}"
 : "${MYSQL_USER:?MYSQL_USER is required}"
@@ -31,6 +33,11 @@ fi
 MYSQL_PASSWORD=$(cat "$DB_PASSWORD_FILE")
 MYSQL_ROOT_PASSWORD=$(cat "$ROOT_PASSWORD_FILE")
 
+if [ -z "$MYSQL_PASSWORD" ] || [ -z "$MYSQL_ROOT_PASSWORD" ]; then
+    echo "Error: MariaDB secrets cannot be empty"
+    exit 1
+fi
+
 escape_sql() {
     printf '%s' "$1" | sed "s/\\\\/\\\\\\\\/g; s/'/''/g"
 }
@@ -42,13 +49,17 @@ mkdir -p /run/mysqld "$DATADIR"
 chown mysql:mysql /run/mysqld "$DATADIR"
 
 if [ ! -d "$DATADIR/mysql" ]; then
-
-    echo "Initializing MariaDB..."
+    echo "Initializing MariaDB system tables..."
 
     mariadb-install-db \
         --user=mysql \
         --datadir="$DATADIR" \
-        --auth-root-authentication-method=socket
+        --auth-root-authentication-method=socket \
+        --skip-test-db
+fi
+
+if [ ! -f "$MARKER" ]; then
+    echo "Starting temporary MariaDB server..."
 
     mariadbd \
         --user=mysql \
@@ -65,9 +76,11 @@ if [ ! -d "$DATADIR/mysql" ]; then
         fi
     }
 
-    trap cleanup EXIT
+    trap cleanup 0
+    trap 'exit 1' HUP INT TERM
 
     i=0
+
     until mariadb \
         --protocol=socket \
         --socket="$SOCKET" \
@@ -100,20 +113,23 @@ CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\`;
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%'
 IDENTIFIED BY '$MYSQL_PASSWORD_ESCAPED';
 
+ALTER USER '$MYSQL_USER'@'%'
+IDENTIFIED BY '$MYSQL_PASSWORD_ESCAPED';
+
 GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.*
 TO '$MYSQL_USER'@'%';
 
 ALTER USER 'root'@'localhost'
-IDENTIFIED BY '$MYSQL_ROOT_PASSWORD_ESCAPED';
+IDENTIFIED VIA unix_socket
+OR mysql_native_password USING PASSWORD('$MYSQL_ROOT_PASSWORD_ESCAPED');
 EOF
+
+    touch "$MARKER"
 
     echo "MariaDB initialization complete."
 
-    kill -TERM "$DB_PID"
-    wait "$DB_PID"
-
-    trap - EXIT
-
+    cleanup
+    trap - 0 HUP INT TERM
 fi
 
 echo "Starting MariaDB..."
@@ -121,4 +137,4 @@ echo "Starting MariaDB..."
 exec mariadbd \
     --user=mysql \
     --datadir="$DATADIR" \
-    --console
+    --socket="$SOCKET"
