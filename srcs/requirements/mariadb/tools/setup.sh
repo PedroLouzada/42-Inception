@@ -59,55 +59,13 @@ if [ ! -d "$DATADIR/mysql" ]; then
 fi
 
 if [ ! -f "$MARKER" ]; then
-    echo "Starting temporary MariaDB server..."
+	echo "Configuring MariaDB..."
 
-    mariadbd \
-        --user=mysql \
-        --datadir="$DATADIR" \
-        --socket="$SOCKET" \
-        --skip-networking &
-
-    DB_PID=$!
-
-    cleanup() {
-        if kill -0 "$DB_PID" 2>/dev/null; then
-            kill -TERM "$DB_PID"
-            wait "$DB_PID" || true
-        fi
-    }
-
-    trap cleanup 0
-    trap 'exit 1' HUP INT TERM
-
-    i=0
-
-    until mariadb \
-        --protocol=socket \
-        --socket="$SOCKET" \
-        -uroot \
-        -e "SELECT 1" >/dev/null 2>&1
-    do
-        if ! kill -0 "$DB_PID" 2>/dev/null; then
-            echo "Error: MariaDB exited during initialization"
-            exit 1
-        fi
-
-        i=$((i + 1))
-
-        if [ "$i" -ge 30 ]; then
-            echo "Error: MariaDB initialization timed out"
-            exit 1
-        fi
-
-        sleep 1
-    done
-
-    echo "Creating WordPress database and user..."
-
-    mariadb \
-        --protocol=socket \
-        --socket="$SOCKET" \
-        -uroot <<EOF
+	mariadbd \
+		--user=mysql \
+		--datadir="$DATADIR" \
+		--bootstrap \
+		--skip-networking <<EOF
 CREATE DATABASE IF NOT EXISTS \`$MYSQL_DATABASE\`;
 
 CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%'
@@ -116,21 +74,25 @@ IDENTIFIED BY '$MYSQL_PASSWORD_ESCAPED';
 ALTER USER '$MYSQL_USER'@'%'
 IDENTIFIED BY '$MYSQL_PASSWORD_ESCAPED';
 
-GRANT ALL PRIVILEGES ON \`$MYSQL_DATABASE\`.*
+GRANT ALL PRIVILEGES
+ON \`$MYSQL_DATABASE\`.*
 TO '$MYSQL_USER'@'%';
 
 ALTER USER 'root'@'localhost'
 IDENTIFIED VIA unix_socket
-OR mysql_native_password USING PASSWORD('$MYSQL_ROOT_PASSWORD_ESCAPED');
+OR mysql_native_password
+USING PASSWORD('$MYSQL_ROOT_PASSWORD_ESCAPED');
+
+FLUSH PRIVILEGES;
 EOF
 
-    touch "$MARKER"
-
-    echo "MariaDB initialization complete."
-
-    cleanup
-    trap - 0 HUP INT TERM
+	touch "$MARKER"
 fi
+
+exec mariadbd \
+	--user=mysql \
+	--datadir="$DATADIR" \
+	--socket="$SOCKET"
 
 echo "Starting MariaDB..."
 

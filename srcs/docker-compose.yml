@@ -76,8 +76,11 @@ secrets:
 volumes:
   wordpress_data:
     driver: local
+    device: /home/pbongiov/data/wordpress
+
   mariadb_data:
     driver: local
+    device: /home/pbongiov/data/mariadb
 
 
 networks:
