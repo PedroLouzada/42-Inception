@@ -167,6 +167,10 @@ HTTP/1.1 301 Moved Permanently
 docker compose -f srcs/docker-compose.yml logs
 ```
 
+### View Ports and SSL Certificate
+```bash
+exec nginx nginx -T 2>&1 | grep -E 'listen|ssl_certificate|ssl_protocols'
+```
 ### View logs for one service
 
 ```bash

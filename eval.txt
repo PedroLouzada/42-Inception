@@ -1,6 +1,1 @@
 
-PORT 443 e SSL PROTOCOL:
-docker compose --env-file ./.env \
-  -f srcs/docker-compose.yml \
-  exec nginx nginx -T 2>&1 |
-grep -E 'listen|ssl_certificate|ssl_protocols'
