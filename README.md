@@ -1,190 +1,180 @@
-*This project has been created as part of the 42 curriculum by pbongiov.*
-
 # Inception
 
-## Description
+## 🐳 About the Project
 
-Inception is a system administration project that deploys a WordPress website using Docker Compose.
+**Inception** is a system administration and DevOps project from the 42 curriculum.
 
-The infrastructure contains three custom images, all built from Debian Bookworm:
+Its goal is to build a small, secure web infrastructure using **Docker**, with every service running in its own container and orchestrated through **Docker Compose**.
 
-- **NGINX** provides the only public entry point, on HTTPS port `443`.
-- **WordPress** runs with PHP-FPM 8.2.
-- **MariaDB** stores the WordPress database.
+The project brings together **NGINX**, **WordPress with PHP-FPM**, and **MariaDB** inside a Linux virtual machine. Each image is built from its own Dockerfile, the services communicate through a dedicated Docker network, and persistent data is stored in named volumes.
 
-The services communicate through a user-defined bridge network:
+Inception pushed me to understand what happens between writing a configuration file and serving a working website: image builds, container startup, process management, networking, TLS, secrets, storage, and service dependencies.
+
+---
+
+## 🧠 What I Learned
+
+- Understanding the difference between **virtual machines**, **Docker images**, and **containers**.
+- Writing custom **Dockerfiles** and keeping the main service process in the foreground.
+- Orchestrating multiple services with **Docker Compose**.
+- Creating an isolated **Docker network** and using service names for container-to-container communication.
+- Configuring **NGINX** as the only public entry point, with HTTPS through **TLS 1.2 and TLS 1.3**.
+- Connecting NGINX to **WordPress and PHP-FPM** through FastCGI.
+- Installing and configuring **WordPress** automatically with WP-CLI.
+- Initializing **MariaDB** safely and making startup scripts idempotent.
+- Preserving WordPress files and database data with **Docker named volumes**.
+- Keeping passwords out of images and source control with **Docker secrets**.
+- Managing startup order, health checks, restart policies, logs, and failure recovery.
+- Debugging permissions, networking, DNS resolution, and service readiness across containers.
+
+---
+
+## 🏗️ Architecture
 
 ```text
 Browser
-  │  HTTPS :443
-  ▼
-┌─────────────────────────────────────────┐
-│  Docker bridge network: "inception"     │
-│                                         │
-│  ┌──────────────────────┐               │
-│  │  NGINX (port 443)    │               │
-│  │  TLSv1.2 / TLSv1.3   │               │
-│  └──────────┬───────────┘               │
-│             │ FastCGI (port 9000)       │
-│  ┌──────────▼───────────┐               │
-│  │  WordPress + php-fpm │               │
-│  └──────────┬───────────┘               │
-│             │ MySQL protocol (port 3306)│
-│  ┌──────────▼───────────┐               │
-│  │  MariaDB             │               │
-│  └──────────────────────┘               │
-└─────────────────────────────────────────┘
+   |
+   | HTTPS :443
+   v
+ NGINX
+   |
+   | FastCGI :9000
+   v
+WordPress + PHP-FPM
+   |
+   | MySQL protocol :3306
+   v
+ MariaDB
 
+Persistent storage:
+- WordPress files → named volume
+- MariaDB data    → named volume
+
+All services communicate through a private Docker network.
+Only NGINX exposes a port to the host.
 ```
 
-Only NGINX publishes a port to the host. WordPress and MariaDB remain accessible only through the internal Docker network.
+---
 
-### Repository structure
+## ⚙️ Features Implemented
 
-```text
-.
-├── Makefile
-├── README.md
-├── USER_DOC.md
-├── DEV_DOC.md
-├── secrets/
-└── srcs/
-    ├── .env
-    ├── docker-compose.yml
-    └── requirements/
-        ├── mariadb/
-        │   ├── Dockerfile
-        │   ├── conf/
-        │   │   └── 99-server.cnf
-        │   └── tools/
-        │       └── setup.sh
-        ├── nginx/
-        │   ├── Dockerfile
-        │   └── conf/
-        │       └── nginx.conf
-        └── wordpress/
-            ├── Dockerfile
-            ├── conf/
-            │   └── www.conf
-            └── tools/
-                └── setup.sh
-```
+### ✅ Core Infrastructure
 
-The directory structure separates responsibilities:
+- Three isolated services, each running in its own container:
+  - **NGINX**
+  - **WordPress with PHP-FPM**
+  - **MariaDB**
+- Custom image for every service, built from its own Dockerfile.
+- Complete stack managed through Docker Compose and a root Makefile.
+- Dedicated bridge network for internal service communication.
+- Automatic restart policy for service recovery.
 
-- `Makefile` provides the project-management commands.
-- `docker-compose.yml` defines how the services work together.
-- Each service directory contains its own Dockerfile and build context.
-- `conf/` contains service configuration.
-- `tools/` contains initialization and entrypoint scripts.
-- `.env` provides non-sensitive runtime configuration.
-- `secrets/` provides passwords without embedding them in images or Compose configuration.
+### 🔒 Security and Reliability
 
+- HTTPS on port `443`, with only TLS 1.2 and TLS 1.3 enabled.
+- NGINX is the only service exposed to the host.
+- Passwords and credentials are stored outside the repository.
+- No passwords are hard-coded in Dockerfiles or committed configuration.
+- Entrypoint scripts can run repeatedly without duplicating or corrupting the installation.
+- WordPress and database data survive container recreation.
 
-## Instructions
+### 💾 Persistent Data
 
-Detailed operational instructions are available in:
+- A named volume stores the WordPress website files.
+- A separate named volume stores the MariaDB database.
+- Removing and recreating containers does not remove application data.
 
-- [`USER_DOC.md`](USER_DOC.md) for users and administrators.
-- [`DEV_DOC.md`](DEV_DOC.md) for developers.
+---
+
+## 🖥️ How to Use
 
 ### Prerequisites
 
-The project requires:
-
-- Linux or a Linux virtual machine
+- A Linux virtual machine
 - Docker Engine
 - Docker Compose plugin
 - GNU Make
-- Port `443` available
-- Internet access during the build and first WordPress initialization
+- Local environment and secret files required by the project configuration
 
-### Hostname
-
-The domain used by the project is:
-
-```text
-pbongiov.42.fr
-```
-
-When Docker and the browser run on the same machine, add this entry to `/etc/hosts`:
-
-```text
-127.0.0.1 pbongiov.42.fr
-```
-
-When Docker runs inside a virtual machine, use the virtual machine's IP instead of `127.0.0.1`.
-
-### Environment configuration
-
-You will need to have a "secrets" folder, and a .env file with the credentials.
-
-### Build and start
-
-From the repository root:
+### Clone and Start the Project
 
 ```bash
+git clone git@github.com:PedroLouzada/42-Inception.git
+cd 42-Inception
 make
 ```
 
-The Makefile builds the images and starts the stack in detached mode.
-
-### Access
-
-Website:
+Add the project domain to the machine that will access the website:
 
 ```text
-https://pbongiov.42.fr
+<VM-IP> <login>.42.fr
 ```
 
-WordPress administration panel:
+Then open:
 
 ```text
-https://pbongiov.42.fr/wp-admin/
+https://<login>.42.fr
 ```
 
-The browser may warn about the self-signed TLS certificate generated during the NGINX image build.
+Because the project uses a self-signed certificate, the browser may display a warning on the first visit.
 
-### Stop and restart
-
-Stop containers without removing them:
-
-```bash
-make stop
-```
-
-Start the existing containers:
-
-```bash
-make start
-```
-
-Remove the containers and project network while preserving volumes:
+### Stop the Infrastructure
 
 ```bash
 make down
 ```
 
-Do not use `make fclean` or `make re` when the existing website and database data must be preserved.
+Use the repository's documented cleanup target only when you intentionally want to remove persistent data.
 
-## Resources
+---
 
-The following official resources were used:
+## 🔍 Infrastructure Rules and Behavior
 
-- [Docker overview](https://docs.docker.com/get-started/docker-overview/)
-- [Dockerfile reference](https://docs.docker.com/reference/dockerfile/)
+- Each service runs in a dedicated container.
+- Containers are built from the penultimate stable release of Debian or Alpine.
+- Application images are built locally instead of using ready-made NGINX, WordPress, or MariaDB images.
+- Containers communicate through the Docker network using service names, not `localhost`.
+- NGINX terminates TLS and forwards PHP requests to WordPress through FastCGI.
+- WordPress connects to MariaDB through the internal Docker network.
+- Only NGINX publishes a port to the host.
+- The primary process of each container runs in the foreground as PID 1.
+- Named volumes keep important data outside the lifecycle of individual containers.
+- Secrets remain outside images and version control.
+
+---
+
+## 🚀 Future Improvements
+
+- Add automated integration tests for service health, networking, TLS, and persistence.
+- Add backup and restore commands for WordPress files and MariaDB data.
+- Improve observability with clearer health checks and structured logs.
+- Harden container permissions and reduce image size where practical.
+- Explore optional services such as Redis, Adminer, FTP, or a static website after the mandatory stack is stable.
+
+---
+
+## 💡 Final Thoughts
+
+Inception changed the way I think about software deployment.
+
+Instead of focusing on a single program, I had to reason about an entire system: how services start, communicate, fail, recover, and preserve their data.
+
+The project made Docker feel much less like a collection of commands and much more like a practical model for building reproducible infrastructure.
+
+It was challenging, especially when a problem crossed several layers at once, but seeing the complete **HTTPS → NGINX → WordPress → MariaDB** flow working made the effort worth it.
+
+---
+
+## 📚 Resources
+
+- [Docker documentation](https://docs.docker.com/)
 - [Docker Compose documentation](https://docs.docker.com/compose/)
-- [Compose file reference](https://docs.docker.com/reference/compose-file/)
-- [Docker networking](https://docs.docker.com/engine/network/)
-- [Docker volumes](https://docs.docker.com/engine/storage/volumes/)
-- [Docker secrets in Compose](https://docs.docker.com/compose/how-tos/use-secrets/)
 - [NGINX documentation](https://nginx.org/en/docs/)
+- [WordPress CLI documentation](https://make.wordpress.org/cli/handbook/)
 - [MariaDB documentation](https://mariadb.com/docs/)
-- [WordPress documentation](https://wordpress.org/documentation/)
-- [WP-CLI documentation](https://make.wordpress.org/cli/handbook/)
 
-### Use of AI
+---
 
-AI was used as a learning and documentation assistant.
+## 📬 Contact
 
-It helped explain Docker concepts such as images, containers, Compose, bridge networking, process lifecycle, PID 1, foreground services, and differences between containers and virtual machines.
+[GitHub](https://github.com/PedroLouzada)
